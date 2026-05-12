@@ -264,6 +264,73 @@
     stroke: var(--red);
     animation: broken-pulse 1s linear infinite;
   }
+
+  .cable-counter {
+    font-family: 'VT323', monospace;
+    font-size: 11px;
+    fill: var(--dim);
+    pointer-events: none;
+    user-select: none;
+  }
+  .cable-counter .drop-count {
+    fill: var(--red);
+    font-weight: bold;
+  }
+  .cable-counter .send-count {
+    fill: var(--lime);
+  }
+
+  /* Interference zone */
+  .interference-zone {
+    fill: var(--orange);
+    fill-opacity: 0.1;
+    stroke: var(--orange);
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+    animation: zone-pulse 2s ease-in-out infinite;
+    cursor: pointer;
+  }
+  .interference-zone:hover { fill-opacity: 0.2; }
+  @keyframes zone-pulse {
+    0%, 100% { stroke-dashoffset: 0; fill-opacity: 0.08; }
+    50% { stroke-dashoffset: -8; fill-opacity: 0.18; }
+  }
+  .interference-icon {
+    fill: var(--orange);
+    pointer-events: none;
+  }
+  .interference-label {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    fill: var(--orange);
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+    font-weight: bold;
+  }
+
+  /* Lost-packet flash */
+  .packet-lost {
+    pointer-events: none;
+    animation: lost-flash 0.8s ease-out forwards;
+  }
+  @keyframes lost-flash {
+    0% { opacity: 1; transform: scale(1); }
+    30% { opacity: 1; transform: scale(1.5) rotate(15deg); }
+    100% { opacity: 0; transform: scale(0.5) translateY(20px) rotate(45deg); }
+  }
+  .packet-lost-body {
+    fill: var(--red);
+    stroke: var(--bg);
+    stroke-width: 2;
+  }
+  .packet-lost-text {
+    font-family: 'VT323', monospace;
+    font-size: 11px;
+    fill: white;
+    text-anchor: middle;
+    font-weight: bold;
+  }
   .cable.preview {
     stroke: var(--lime);
     stroke-dasharray: 4 4;
@@ -539,6 +606,7 @@
       <button class="ctrl-btn primary" id="btnSend">>> SEND MESSAGE</button>
       <button class="ctrl-btn" id="btnPause">PAUSE</button>
       <button class="ctrl-btn" id="btnSpeed">SPEED: 1x</button>
+      <button class="ctrl-btn" id="btnBusy">WIFI BUSY: OFF</button>
       <button class="ctrl-btn" id="btnScenario">LOAD SCENARIO</button>
       <button class="ctrl-btn danger" id="btnClear">CLEAR</button>
       <button class="ctrl-btn" id="btnHelp">HELP</button>
@@ -614,6 +682,14 @@
             </svg>
             <span class="pi-label">WIRELESS</span>
           </div>
+          <div class="palette-item tool" data-tool="interference">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="10" fill="none" stroke="#ff8800" stroke-width="2" stroke-dasharray="2 2"/>
+              <path d="M 12 12 L 20 20 M 20 12 L 12 20" stroke="#ff8800" stroke-width="2.5"/>
+              <circle cx="16" cy="16" r="3" fill="#ff8800"/>
+            </svg>
+            <span class="pi-label">NOISE</span>
+          </div>
           <div class="palette-item tool" data-tool="break">
             <svg class="pi-icon" viewBox="0 0 32 32">
               <path d="M 4 16 L 12 16" stroke="#ff4d6d" stroke-width="3"/>
@@ -678,18 +754,22 @@ const state = {
   devices: [],
   connections: [],
   packets: [],
+  interferences: [],
   messages: {},       // messageId -> { src, dst, text, totalPackets, arrived, lost }
   tool: 'move',
   cableStart: null,
   draggingDevice: null,
+  draggingInterference: null,
   dragOffset: { x: 0, y: 0 },
   mouseX: 0, mouseY: 0,
   paused: false,
+  busy: false,
   speed: 1,
   nextId: 1,
   nextMsgId: 1,
   packetCount: 0,
   arrivedCount: 0,
+  lostFx: [],          // visual lost-packet animations
 };
 
 const $ = sel => document.querySelector(sel);
@@ -709,9 +789,10 @@ const TOOL_INFO = {
   switch: '<b>PLACING SWITCH</b> — switches join devices on the same network. They pass packets between connected devices.',
   router: '<b>PLACING ROUTER</b> — routers connect different networks. They decide which way each packet should go.',
   'cable-wired':    '<b>WIRED CABLE</b> — click two devices to connect them with an Ethernet cable. Stable, fast, no packet loss.',
-  'cable-wireless': '<b>WIRELESS LINK</b> — click two devices to connect them with WiFi. Convenient — but signal can drop! About 1 in 12 packets gets lost and resent.',
+  'cable-wireless': '<b>WIRELESS LINK</b> — click two devices to connect them with WiFi. Convenient — but signal can drop! Longer links = more packets lost. Interference makes it much worse.',
+  interference:    '<b>NOISE / INTERFERENCE</b> — click on the canvas to place a noise source (microwave, neighbour WiFi). Any wireless link inside the orange zone loses LOTS of packets.',
   break:  '<b>BREAK CABLE</b> — click a cable to break it. Click again to fix it. Packets cannot cross a broken cable.',
-  delete: '<b>DELETE</b> — click any device or cable to remove it. <b style="color:var(--red);">WARNING</b> — cannot undo.',
+  delete: '<b>DELETE</b> — click any device, cable or noise source to remove it. <b style="color:var(--red);">WARNING</b> — cannot undo.',
 };
 
 /* ====================== HELPERS ====================== */
@@ -748,7 +829,7 @@ function setTool(tool) {
     el.classList.toggle('active', el.dataset.tool === tool);
   });
   svg.classList.remove('placing', 'cabling', 'breaking', 'deleting');
-  if (['pc','server','switch','router'].includes(tool)) svg.classList.add('placing');
+  if (['pc','server','switch','router','interference'].includes(tool)) svg.classList.add('placing');
   else if (tool === 'cable-wired' || tool === 'cable-wireless') svg.classList.add('cabling');
   else if (tool === 'break') svg.classList.add('breaking');
   else if (tool === 'delete') svg.classList.add('deleting');
@@ -806,7 +887,9 @@ function addConnection(fromId, toId, type = 'wired') {
     id: state.nextId++,
     from: fromId, to: toId,
     broken: false,
-    type
+    type,
+    sent: 0,
+    dropped: 0
   };
   state.connections.push(conn);
   const f = getDevice(fromId), t = getDevice(toId);
@@ -858,6 +941,55 @@ function toggleBreak(id) {
     toast('Cable restored', 'success');
   }
   render();
+}
+
+function addInterference(x, y) {
+  const sources = ['Microwave', 'Neighbour WiFi', 'Bluetooth', 'Thick Wall'];
+  const label = sources[state.interferences.length % sources.length];
+  const iz = {
+    id: state.nextId++,
+    x, y,
+    label,
+    radius: 110
+  };
+  state.interferences.push(iz);
+  log(`Added interference source: ${label}`, 'info');
+  toast(`Wireless links near "${label}" will lose more packets`, 'error');
+  render();
+}
+
+function removeInterference(id) {
+  const iz = state.interferences.find(i => i.id === id);
+  if (!iz) return;
+  state.interferences = state.interferences.filter(i => i.id !== id);
+  log(`Removed interference: ${iz.label}`, 'info');
+  render();
+}
+
+function getWirelessLossRate(conn) {
+  if (conn.type !== 'wireless') return 0;
+  let loss = 0.05; // base 5%
+  // Distance penalty
+  const a = getDevice(conn.from), b = getDevice(conn.to);
+  if (a && b) {
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    if (dist > 350) loss += 0.20;
+    else if (dist > 250) loss += 0.10;
+    else if (dist > 180) loss += 0.05;
+    // Interference: midpoint inside any zone?
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    for (const iz of state.interferences) {
+      const d = Math.hypot(iz.x - mx, iz.y - my);
+      if (d < iz.radius) {
+        loss += 0.30;
+      } else if (d < iz.radius + 50) {
+        loss += 0.10;
+      }
+    }
+  }
+  // Network busy penalty
+  if (state.busy) loss += 0.18;
+  return Math.min(0.7, loss);
 }
 
 /* ====================== ROUTING (BFS) ====================== */
@@ -1011,6 +1143,8 @@ function animate(now) {
   lastFrameTime = now;
 
   if (!state.paused) {
+    // Clean up old lost-packet FX
+    state.lostFx = state.lostFx.filter(fx => now - fx.startTime < 800);
     // Update packets in transit
     for (let i = state.packets.length - 1; i >= 0; i--) {
       const p = state.packets[i];
@@ -1025,9 +1159,21 @@ function animate(now) {
           (c.from === completedEdge.from && c.to === completedEdge.to) ||
           (c.from === completedEdge.to && c.to === completedEdge.from)
         );
-        // Wireless edges have ~8% loss chance per hop (educational realism)
-        if (completedConn && completedConn.type === 'wireless' && Math.random() < 0.08) {
-          log(`Packet ${p.seqNum}/${p.totalSeq} LOST on WiFi (signal dropped)`, 'error');
+        if (completedConn) completedConn.sent++;
+        // Dynamic wireless loss based on distance, interference and busy state
+        const lossRate = completedConn ? getWirelessLossRate(completedConn) : 0;
+        if (completedConn && completedConn.type === 'wireless' && Math.random() < lossRate) {
+          // Drop animation at end-point of edge
+          const endNode = getDevice(completedEdge.to);
+          if (endNode) {
+            state.lostFx.push({
+              x: endNode.x, y: endNode.y,
+              seqNum: p.seqNum, totalSeq: p.totalSeq,
+              startTime: now
+            });
+          }
+          completedConn.dropped++;
+          log(`Packet ${p.seqNum}/${p.totalSeq} LOST on WiFi (signal weak)`, 'error');
           p.status = 'lost';
           scheduleRetransmit(p);
           state.packets.splice(i, 1);
@@ -1076,6 +1222,18 @@ function render() {
   // Build SVG content
   let html = '';
 
+  // Interference zones (drawn BEHIND everything else)
+  state.interferences.forEach(iz => {
+    html += `<circle class="interference-zone" cx="${iz.x}" cy="${iz.y}" r="${iz.radius}" data-id="${iz.id}" data-iz="1"/>`;
+    // Icon at centre
+    html += `<g class="interference-icon" data-id="${iz.id}" data-iz="1">
+      <circle cx="${iz.x}" cy="${iz.y}" r="14" fill="${'#ff8800'}" opacity="0.3"/>
+      <circle cx="${iz.x}" cy="${iz.y}" r="14" fill="none" stroke="${'#ff8800'}" stroke-width="2" stroke-dasharray="2 2"/>
+      <path d="M ${iz.x - 5} ${iz.y - 5} L ${iz.x + 5} ${iz.y + 5} M ${iz.x + 5} ${iz.y - 5} L ${iz.x - 5} ${iz.y + 5}" stroke="${'#ff8800'}" stroke-width="2.5" fill="none"/>
+    </g>`;
+    html += `<text class="interference-label" x="${iz.x}" y="${iz.y + iz.radius + 16}">${iz.label}</text>`;
+  });
+
   // Connections (cables)
   state.connections.forEach(c => {
     const a = getDevice(c.from), b = getDevice(c.to);
@@ -1097,6 +1255,20 @@ function render() {
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       html += `<circle class="cable-break-mark" cx="${mx}" cy="${my}" r="10"/>`;
       html += `<text class="cable-break-mark" x="${mx}" y="${my+4}" text-anchor="middle" font-family="VT323" font-size="14" fill="white" stroke="none">X</text>`;
+    }
+    // Cable counter (sent / dropped)
+    if (c.sent > 0 || c.dropped > 0) {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      const perpX = -dy / len * 16, perpY = dx / len * 16;
+      const mx = (a.x + b.x) / 2 + perpX;
+      const my = (a.y + b.y) / 2 + perpY;
+      html += `<text class="cable-counter" x="${mx}" y="${my}" text-anchor="middle">`;
+      html += `<tspan class="send-count">${c.sent}</tspan>`;
+      html += `<tspan> sent / </tspan>`;
+      html += `<tspan class="drop-count">${c.dropped}</tspan>`;
+      html += `<tspan> lost</tspan>`;
+      html += `</text>`;
     }
   });
 
@@ -1171,6 +1343,14 @@ function render() {
     </g>`;
   });
 
+  // Lost packet animations
+  state.lostFx.forEach(fx => {
+    html += `<g class="packet-lost">
+      <rect class="packet-lost-body" x="${fx.x - 16}" y="${fx.y - 10}" width="32" height="20" rx="2"/>
+      <text class="packet-lost-text" x="${fx.x}" y="${fx.y + 5}">LOST</text>
+    </g>`;
+  });
+
   svg.innerHTML = html;
 }
 
@@ -1183,6 +1363,10 @@ svg.addEventListener('mousemove', (e) => {
   if (state.draggingDevice) {
     state.draggingDevice.x = state.mouseX - state.dragOffset.x;
     state.draggingDevice.y = state.mouseY - state.dragOffset.y;
+  }
+  if (state.draggingInterference) {
+    state.draggingInterference.x = state.mouseX - state.dragOffset.x;
+    state.draggingInterference.y = state.mouseY - state.dragOffset.y;
   }
 });
 
@@ -1202,13 +1386,27 @@ svg.addEventListener('mousedown', (e) => {
         state.draggingDevice = dev;
         state.dragOffset = { x: x - dev.x, y: y - dev.y };
       }
+    } else if (e.target.dataset && e.target.dataset.iz) {
+      const id = parseInt(e.target.dataset.id);
+      const iz = state.interferences.find(i => i.id === id);
+      if (iz) {
+        state.draggingInterference = iz;
+        state.dragOffset = { x: x - iz.x, y: y - iz.y };
+      }
+    }
+    return;
+  }
+
+  if (state.tool === 'interference') {
+    if (!target && !(e.target.dataset && e.target.dataset.iz)) {
+      addInterference(x, y);
     }
     return;
   }
 
   if (['pc','server','switch','router'].includes(state.tool)) {
     // Place a device
-    if (!target) {
+    if (!target && !(e.target.dataset && e.target.dataset.iz)) {
       addDevice(state.tool, x, y);
     }
     return;
@@ -1240,6 +1438,11 @@ svg.addEventListener('mousedown', (e) => {
   }
 
   if (state.tool === 'delete') {
+    if (e.target.dataset && e.target.dataset.iz) {
+      const id = parseInt(e.target.dataset.id);
+      removeInterference(id);
+      return;
+    }
     if (!target) return;
     const id = parseInt(target.dataset.id);
     if (target.classList.contains('device')) removeDevice(id);
@@ -1250,6 +1453,7 @@ svg.addEventListener('mousedown', (e) => {
 
 document.addEventListener('mouseup', () => {
   state.draggingDevice = null;
+  state.draggingInterference = null;
 });
 
 document.addEventListener('keydown', (e) => {
@@ -1313,16 +1517,31 @@ $('#btnSpeed').addEventListener('click', (e) => {
   e.target.textContent = 'SPEED: ' + state.speed + 'x';
 });
 
+$('#btnBusy').addEventListener('click', (e) => {
+  state.busy = !state.busy;
+  e.target.textContent = 'WIFI BUSY: ' + (state.busy ? 'ON' : 'OFF');
+  e.target.classList.toggle('danger', state.busy);
+  if (state.busy) {
+    log('NETWORK IS BUSY — lots of other devices on WiFi. Wireless will drop MORE packets!', 'error');
+    toast('Network busy — wireless will get worse', 'error');
+  } else {
+    log('Network busy mode OFF', 'info');
+    toast('Network back to normal', 'success');
+  }
+});
+
 $('#btnClear').addEventListener('click', () => {
-  if (state.devices.length === 0 && state.connections.length === 0) return;
+  if (state.devices.length === 0 && state.connections.length === 0 && state.interferences.length === 0) return;
   if (!confirm('Clear the whole network?')) return;
   state.devices = [];
   state.connections = [];
   state.packets = [];
+  state.interferences = [];
   state.messages = {};
   state.cableStart = null;
   state.packetCount = 0;
   state.arrivedCount = 0;
+  state.lostFx = [];
   $('#log').innerHTML = '';
   log('Network cleared', 'info');
   updateStats();
@@ -1417,6 +1636,7 @@ function openScenarioModal() {
         <button class="ctrl-btn" data-sc="mesh">MESH — Multiple wired routes (packets split)</button>
         <button class="ctrl-btn" data-sc="redundant">RESILIENT — Break-the-cable demo</button>
         <button class="ctrl-btn" data-sc="home">HOME WIFI — Wired vs wireless side by side</button>
+        <button class="ctrl-btn" data-sc="interference">INTERFERENCE — Microwave kills the WiFi</button>
         <button class="ctrl-btn" data-sc="hospital">HOSPITAL — When wired wins (life-critical)</button>
         <button class="ctrl-btn" data-sc="school">SCHOOL — Realistic small network (mixed)</button>
       </div>
@@ -1442,9 +1662,11 @@ function loadScenario(name) {
   state.devices = [];
   state.connections = [];
   state.packets = [];
+  state.interferences = [];
   state.messages = {};
   state.packetCount = 0;
   state.arrivedCount = 0;
+  state.lostFx = [];
   $('#log').innerHTML = '';
   state.nextId = 1;
   state.nextMsgId = 1;
@@ -1511,6 +1733,27 @@ function loadScenario(name) {
     addConnection(tv.id, router.id, 'wireless');        // TV = WiFi
     log('SCENARIO: Home WiFi. Desktop is WIRED. Laptop, Phone and TV are WIRELESS. Send messages and watch how WiFi sometimes drops packets!', 'info');
     toast('Home WiFi loaded — try Desktop → Laptop', 'success');
+  }
+  else if (name === 'interference') {
+    const pc1 = addDevice('pc', cx - 280, cy);
+    const router = addDevice('router', cx, cy);
+    const laptopNear = addDevice('pc', cx + 200, cy - 100);
+    const laptopFar  = addDevice('pc', cx + 320, cy + 100);
+    pc1.label = 'Desktop';
+    laptopNear.label = 'Laptop-Near';
+    laptopFar.label = 'Laptop-Far';
+    addConnection(pc1.id, router.id, 'wired');
+    addConnection(router.id, laptopNear.id, 'wireless');
+    addConnection(router.id, laptopFar.id, 'wireless');
+    // Drop a microwave between router and Laptop-Far
+    state.interferences.push({
+      id: state.nextId++,
+      x: cx + 160, y: cy + 60,
+      label: 'Microwave',
+      radius: 110
+    });
+    log('SCENARIO: Interference. There is a MICROWAVE near Laptop-Far. Send a message to Laptop-Near vs Laptop-Far — compare the loss!', 'info');
+    toast('Try sending to Laptop-Near vs Laptop-Far', 'success');
   }
   else if (name === 'hospital') {
     const surgeryPC = addDevice('pc', cx - 220, cy - 100);
