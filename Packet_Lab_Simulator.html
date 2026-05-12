@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PACKET LAB // Network Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg-2: #11162a;
+    --panel: #161c33;
+    --line: #1f2748;
+    --ink: #e8eaf3;
+    --dim: #8a93b8;
+    --cyan: #00f0ff;
+    --pink: #ff2d95;
+    --lime: #39ff14;
+    --amber: #ffb800;
+    --red: #ff4d6d;
+    --purple: #b14aff;
+    --orange: #ff8800;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'JetBrains Mono', monospace; height: 100vh; overflow: hidden; }
+
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(0, 240, 255, 0.025) 0px, rgba(0, 240, 255, 0.025) 1px, transparent 1px, transparent 3px);
+    pointer-events: none; z-index: 100;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  header.topbar {
+    background: var(--bg-2);
+    border-bottom: 2px solid var(--line);
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    position: relative;
+  }
+  header.topbar::after {
+    content: '';
+    position: absolute;
+    bottom: -2px; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--pink), var(--cyan));
+    background-size: 200% 100%;
+    animation: shimmer 4s linear infinite;
+  }
+  @keyframes shimmer {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+  .logo {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    line-height: 1;
+    letter-spacing: 2px;
+    color: var(--cyan);
+    text-shadow: 0 0 12px rgba(0, 240, 255, 0.45);
+  }
+  .logo .slash { color: var(--pink); }
+  .logo .sub {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+
+  .top-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 8px 14px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  .ctrl-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  .ctrl-btn.primary {
+    border-color: var(--lime);
+    color: var(--lime);
+  }
+  .ctrl-btn.primary:hover {
+    background: var(--lime);
+    color: var(--bg);
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.4);
+  }
+  .ctrl-btn.danger { border-color: var(--red); color: var(--red); }
+  .ctrl-btn.danger:hover { background: var(--red); color: var(--bg); }
+
+  .main {
+    display: grid;
+    grid-template-columns: 200px 1fr 280px;
+    gap: 0;
+    overflow: hidden;
+  }
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 160px 1fr 240px; }
+  }
+  @media (max-width: 720px) {
+    .main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr auto;
+    }
+    .palette { border-right: none !important; border-bottom: 1px solid var(--line); padding: 8px !important; }
+    .palette-content { display: flex !important; flex-wrap: wrap; gap: 8px; }
+    .palette-section { width: auto !important; margin: 0 !important; }
+    .palette-title { display: none !important; }
+    .info-panel { border-left: none !important; border-top: 1px solid var(--line); }
+  }
+
+  .palette {
+    background: var(--bg-2);
+    border-right: 1px solid var(--line);
+    padding: 14px 12px;
+    overflow-y: auto;
+  }
+  .palette-section { margin-bottom: 18px; }
+  .palette-title {
+    font-family: 'VT323', monospace;
+    color: var(--pink);
+    font-size: 16px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .palette-item {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 10px 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+  }
+  .palette-item:hover {
+    border-color: var(--cyan);
+    transform: translateX(2px);
+  }
+  .palette-item.active {
+    border-color: var(--lime);
+    background: rgba(57, 255, 20, 0.08);
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.3);
+  }
+  .palette-item .pi-icon {
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+  }
+  .palette-item .pi-label {
+    font-size: 11px;
+    color: var(--ink);
+    letter-spacing: 1px;
+  }
+  .palette-item.tool .pi-label { font-size: 10px; }
+
+  .workspace-wrap {
+    position: relative;
+    background:
+      radial-gradient(ellipse at center, rgba(0, 240, 255, 0.04), transparent 70%),
+      var(--bg);
+    overflow: hidden;
+  }
+  .workspace-wrap::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  svg.workspace {
+    width: 100%; height: 100%;
+    display: block;
+    position: relative;
+    z-index: 1;
+  }
+  svg.workspace.placing { cursor: crosshair; }
+  svg.workspace.cabling { cursor: cell; }
+  svg.workspace.breaking { cursor: not-allowed; }
+  svg.workspace.deleting { cursor: not-allowed; }
+
+  /* Device groups */
+  .device { cursor: grab; }
+  .device.dragging { cursor: grabbing; }
+  .device-body {
+    transition: filter 0.2s;
+  }
+  .device:hover .device-body {
+    filter: drop-shadow(0 0 8px var(--cyan));
+  }
+  .device.selected .device-body {
+    filter: drop-shadow(0 0 12px var(--lime));
+  }
+  .device-label {
+    font-family: 'VT323', monospace;
+    font-size: 14px;
+    fill: var(--cyan);
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Connections */
+  .cable {
+    stroke: var(--cyan);
+    stroke-width: 3;
+    fill: none;
+    cursor: pointer;
+    transition: stroke 0.2s;
+  }
+  .cable:hover { stroke: var(--lime); stroke-width: 4; }
+  .cable.broken {
+    stroke: var(--red);
+    stroke-dasharray: 6 4;
+    animation: broken-pulse 1s linear infinite;
+  }
+  @keyframes broken-pulse {
+    0% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: 10; }
+  }
+  .cable.wireless {
+    stroke: var(--pink);
+    stroke-width: 3;
+    stroke-dasharray: 8 6;
+    animation: wireless-pulse 1.5s linear infinite;
+  }
+  @keyframes wireless-pulse {
+    0% { stroke-dashoffset: 0; opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { stroke-dashoffset: -14; opacity: 0.7; }
+  }
+  .cable.wireless:hover { stroke: var(--lime); }
+  .cable.wireless.broken {
+    stroke: var(--red);
+    animation: broken-pulse 1s linear infinite;
+  }
+  .cable.preview {
+    stroke: var(--lime);
+    stroke-dasharray: 4 4;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+  .cable-break-mark {
+    fill: var(--red);
+    stroke: var(--bg);
+    stroke-width: 2;
+    pointer-events: none;
+  }
+
+  /* Packets */
+  .packet {
+    pointer-events: none;
+    filter: drop-shadow(0 0 6px var(--amber));
+  }
+  .packet-body {
+    fill: var(--amber);
+    stroke: var(--bg);
+    stroke-width: 2;
+  }
+  .packet.arrived .packet-body { fill: var(--lime); }
+  .packet.lost .packet-body { fill: var(--red); }
+  .packet-text {
+    font-family: 'VT323', monospace;
+    font-size: 11px;
+    fill: var(--bg);
+    text-anchor: middle;
+    font-weight: bold;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Info panel */
+  .info-panel {
+    background: var(--bg-2);
+    border-left: 1px solid var(--line);
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .info-section { }
+  .info-title {
+    font-family: 'VT323', monospace;
+    color: var(--pink);
+    font-size: 16px;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .info-text {
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.6;
+  }
+  .info-text b { color: var(--cyan); }
+  .info-text kbd {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 1px 5px;
+    font-family: 'VT323', monospace;
+    font-size: 12px;
+  }
+
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 8px;
+    flex: 1;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.6;
+    min-height: 100px;
+  }
+  .log-entry {
+    margin-bottom: 4px;
+    color: var(--dim);
+  }
+  .log-entry .t {
+    color: var(--amber);
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+  }
+  .log-entry.send { color: var(--cyan); }
+  .log-entry.recv { color: var(--lime); }
+  .log-entry.error { color: var(--red); }
+  .log-entry.info { color: var(--purple); }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .stat-box {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    padding: 6px;
+    text-align: center;
+  }
+  .stat-box .v {
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    color: var(--cyan);
+    line-height: 1.1;
+  }
+  .stat-box .l {
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 24px;
+    max-width: 500px;
+    width: 100%;
+    position: relative;
+  }
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyan), var(--pink), var(--cyan));
+  }
+  .modal h2 {
+    font-family: 'VT323', monospace;
+    font-size: 28px;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+  .modal p {
+    color: var(--dim);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .modal label {
+    display: block;
+    font-size: 11px;
+    color: var(--cyan);
+    letter-spacing: 2px;
+    margin: 12px 0 4px;
+  }
+  .modal select, .modal input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  .modal select:focus, .modal input:focus { border-color: var(--cyan); }
+  .modal .modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 18px;
+  }
+
+  /* Tutorial */
+  .tutorial {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--panel);
+    border: 1px solid var(--cyan);
+    padding: 16px;
+    max-width: 320px;
+    z-index: 200;
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+  }
+  .tutorial h3 {
+    font-family: 'VT323', monospace;
+    color: var(--cyan);
+    font-size: 20px;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .tutorial p {
+    font-size: 12px;
+    color: var(--ink);
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .tutorial .close {
+    position: absolute;
+    top: 6px; right: 8px;
+    background: none;
+    border: none;
+    color: var(--dim);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .tutorial .close:hover { color: var(--red); }
+  .tutorial .next {
+    background: transparent;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .tutorial .next:hover {
+    background: var(--cyan);
+    color: var(--bg);
+  }
+  .tutorial-progress {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    margin-top: 6px;
+  }
+
+  .toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    border: 1px solid var(--cyan);
+    padding: 10px 18px;
+    font-size: 12px;
+    color: var(--cyan);
+    letter-spacing: 1px;
+    z-index: 300;
+    animation: toast-in 0.3s ease-out, toast-out 0.3s ease-in 2.7s forwards;
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  }
+  .toast.error { border-color: var(--red); color: var(--red); box-shadow: 0 0 12px rgba(255, 77, 109, 0.3); }
+  .toast.success { border-color: var(--lime); color: var(--lime); box-shadow: 0 0 12px rgba(57, 255, 20, 0.3); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  }
+  @keyframes toast-out {
+    to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <header class="topbar">
+    <div class="logo">
+      PACKET<span class="slash">//</span>LAB
+      <span class="sub">NETWORK SIMULATOR · YEAR 7 COMPUTING · WIRED + WIRELESS + PACKETS</span>
+    </div>
+    <div class="top-controls">
+      <button class="ctrl-btn primary" id="btnSend">>> SEND MESSAGE</button>
+      <button class="ctrl-btn" id="btnPause">PAUSE</button>
+      <button class="ctrl-btn" id="btnSpeed">SPEED: 1x</button>
+      <button class="ctrl-btn" id="btnScenario">LOAD SCENARIO</button>
+      <button class="ctrl-btn danger" id="btnClear">CLEAR</button>
+      <button class="ctrl-btn" id="btnHelp">HELP</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="palette">
+      <div class="palette-content">
+        <div class="palette-section">
+          <div class="palette-title">// Devices</div>
+          <div class="palette-item" data-tool="pc">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <rect x="3" y="6" width="26" height="16" fill="none" stroke="#00f0ff" stroke-width="2"/>
+              <rect x="6" y="9" width="20" height="10" fill="#00f0ff" opacity="0.3"/>
+              <line x1="10" y1="26" x2="22" y2="26" stroke="#00f0ff" stroke-width="2"/>
+              <line x1="16" y1="22" x2="16" y2="26" stroke="#00f0ff" stroke-width="2"/>
+            </svg>
+            <span class="pi-label">PC</span>
+          </div>
+          <div class="palette-item" data-tool="server">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <rect x="5" y="4" width="22" height="6" fill="none" stroke="#39ff14" stroke-width="2"/>
+              <rect x="5" y="13" width="22" height="6" fill="none" stroke="#39ff14" stroke-width="2"/>
+              <rect x="5" y="22" width="22" height="6" fill="none" stroke="#39ff14" stroke-width="2"/>
+              <circle cx="9" cy="7" r="1" fill="#39ff14"/>
+              <circle cx="9" cy="16" r="1" fill="#39ff14"/>
+              <circle cx="9" cy="25" r="1" fill="#39ff14"/>
+            </svg>
+            <span class="pi-label">SERVER</span>
+          </div>
+          <div class="palette-item" data-tool="switch">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <rect x="3" y="10" width="26" height="12" rx="2" fill="none" stroke="#ffb800" stroke-width="2"/>
+              <line x1="8" y1="10" x2="8" y2="6" stroke="#ffb800" stroke-width="2"/>
+              <line x1="14" y1="10" x2="14" y2="6" stroke="#ffb800" stroke-width="2"/>
+              <line x1="20" y1="10" x2="20" y2="6" stroke="#ffb800" stroke-width="2"/>
+              <line x1="26" y1="10" x2="26" y2="6" stroke="#ffb800" stroke-width="2"/>
+              <line x1="8" y1="22" x2="8" y2="26" stroke="#ffb800" stroke-width="2"/>
+              <line x1="14" y1="22" x2="14" y2="26" stroke="#ffb800" stroke-width="2"/>
+              <line x1="20" y1="22" x2="20" y2="26" stroke="#ffb800" stroke-width="2"/>
+              <line x1="26" y1="22" x2="26" y2="26" stroke="#ffb800" stroke-width="2"/>
+            </svg>
+            <span class="pi-label">SWITCH</span>
+          </div>
+          <div class="palette-item" data-tool="router">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="10" fill="none" stroke="#b14aff" stroke-width="2"/>
+              <path d="M 16 6 L 20 10 L 16 10 L 16 16 L 22 16 L 22 12 L 26 16 L 22 20 L 22 16" fill="none" stroke="#b14aff" stroke-width="1.5"/>
+              <path d="M 16 26 L 12 22 L 16 22 L 16 16 L 10 16 L 10 20 L 6 16 L 10 12 L 10 16" fill="none" stroke="#b14aff" stroke-width="1.5"/>
+            </svg>
+            <span class="pi-label">ROUTER</span>
+          </div>
+        </div>
+
+        <div class="palette-section">
+          <div class="palette-title">// Tools</div>
+          <div class="palette-item tool" data-tool="cable-wired">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <path d="M 4 16 Q 16 4 28 16" fill="none" stroke="#00f0ff" stroke-width="3"/>
+              <circle cx="4" cy="16" r="3" fill="#00f0ff"/>
+              <circle cx="28" cy="16" r="3" fill="#00f0ff"/>
+            </svg>
+            <span class="pi-label">WIRED</span>
+          </div>
+          <div class="palette-item tool" data-tool="cable-wireless">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <path d="M 6 22 Q 16 8 26 22" fill="none" stroke="#ff2d95" stroke-width="2.5" stroke-dasharray="4 3"/>
+              <circle cx="6" cy="22" r="2.5" fill="#ff2d95"/>
+              <circle cx="26" cy="22" r="2.5" fill="#ff2d95"/>
+              <path d="M 11 11 Q 16 6 21 11" fill="none" stroke="#ff2d95" stroke-width="1.5" opacity="0.6"/>
+              <path d="M 9 8 Q 16 0 23 8" fill="none" stroke="#ff2d95" stroke-width="1.2" opacity="0.4"/>
+            </svg>
+            <span class="pi-label">WIRELESS</span>
+          </div>
+          <div class="palette-item tool" data-tool="break">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <path d="M 4 16 L 12 16" stroke="#ff4d6d" stroke-width="3"/>
+              <path d="M 20 16 L 28 16" stroke="#ff4d6d" stroke-width="3"/>
+              <path d="M 13 10 L 19 22 M 19 10 L 13 22" stroke="#ff4d6d" stroke-width="2"/>
+            </svg>
+            <span class="pi-label">BREAK</span>
+          </div>
+          <div class="palette-item tool" data-tool="delete">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <path d="M 8 8 L 24 24 M 24 8 L 8 24" stroke="#ff4d6d" stroke-width="3"/>
+            </svg>
+            <span class="pi-label">DELETE</span>
+          </div>
+          <div class="palette-item tool" data-tool="move" style="border-color: var(--lime); color: var(--lime);">
+            <svg class="pi-icon" viewBox="0 0 32 32">
+              <path d="M 16 4 L 16 28 M 4 16 L 28 16 M 12 8 L 16 4 L 20 8 M 12 24 L 16 28 L 20 24 M 8 12 L 4 16 L 8 20 M 24 12 L 28 16 L 24 20" stroke="#39ff14" stroke-width="2" fill="none"/>
+            </svg>
+            <span class="pi-label">MOVE</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="workspace-wrap">
+      <svg class="workspace" id="workspace" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <aside class="info-panel">
+      <div class="info-section">
+        <div class="info-title">// Status</div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="v" id="statDevices">0</div><div class="l">Devices</div></div>
+          <div class="stat-box"><div class="v" id="statCables">0</div><div class="l">Cables</div></div>
+          <div class="stat-box"><div class="v" id="statSent">0</div><div class="l">Sent</div></div>
+          <div class="stat-box"><div class="v" id="statArrived">0</div><div class="l">Arrived</div></div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <div class="info-title">// Tool</div>
+        <div class="info-text" id="toolInfo">
+          <b>MOVE</b> — drag devices to reposition.
+          Click a device in the palette to start placing devices on the canvas.
+        </div>
+      </div>
+
+      <div class="info-section" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="info-title">// Packet Log</div>
+        <div class="log" id="log"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   PACKET LAB — Network Simulator
+   =================================================================== */
+
+const state = {
+  devices: [],
+  connections: [],
+  packets: [],
+  messages: {},       // messageId -> { src, dst, text, totalPackets, arrived, lost }
+  tool: 'move',
+  cableStart: null,
+  draggingDevice: null,
+  dragOffset: { x: 0, y: 0 },
+  mouseX: 0, mouseY: 0,
+  paused: false,
+  speed: 1,
+  nextId: 1,
+  nextMsgId: 1,
+  packetCount: 0,
+  arrivedCount: 0,
+};
+
+const $ = sel => document.querySelector(sel);
+const svg = $('#workspace');
+
+const DEVICE_CONFIG = {
+  pc:     { color: '#00f0ff', label: 'PC',     size: 50, canSend: true },
+  server: { color: '#39ff14', label: 'SERVER', size: 50, canSend: true },
+  switch: { color: '#ffb800', label: 'SWITCH', size: 50, canSend: false },
+  router: { color: '#b14aff', label: 'ROUTER', size: 50, canSend: false },
+};
+
+const TOOL_INFO = {
+  move:   '<b>MOVE</b> — click and drag any device to move it. Click a cable to select it.',
+  pc:     '<b>PLACING PC</b> — click anywhere on the canvas to drop a PC. Press <kbd>Esc</kbd> to cancel.',
+  server: '<b>PLACING SERVER</b> — click on the canvas to drop a server. Servers can send and receive like PCs but are usually destinations.',
+  switch: '<b>PLACING SWITCH</b> — switches join devices on the same network. They pass packets between connected devices.',
+  router: '<b>PLACING ROUTER</b> — routers connect different networks. They decide which way each packet should go.',
+  'cable-wired':    '<b>WIRED CABLE</b> — click two devices to connect them with an Ethernet cable. Stable, fast, no packet loss.',
+  'cable-wireless': '<b>WIRELESS LINK</b> — click two devices to connect them with WiFi. Convenient — but signal can drop! About 1 in 12 packets gets lost and resent.',
+  break:  '<b>BREAK CABLE</b> — click a cable to break it. Click again to fix it. Packets cannot cross a broken cable.',
+  delete: '<b>DELETE</b> — click any device or cable to remove it. <b style="color:var(--red);">WARNING</b> — cannot undo.',
+};
+
+/* ====================== HELPERS ====================== */
+
+function log(text, type = 'info') {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + type;
+  const time = new Date().toLocaleTimeString('en-GB', { hour12: false }).slice(3);
+  entry.innerHTML = `<span class="t">${time}</span> ${text}`;
+  const logEl = $('#log');
+  logEl.insertBefore(entry, logEl.firstChild);
+  while (logEl.children.length > 60) logEl.removeChild(logEl.lastChild);
+}
+
+function toast(msg, kind = 'info') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind === 'error' ? 'error' : kind === 'success' ? 'success' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3100);
+}
+
+function updateStats() {
+  $('#statDevices').textContent = state.devices.length;
+  $('#statCables').textContent = state.connections.length;
+  $('#statSent').textContent = state.packetCount;
+  $('#statArrived').textContent = state.arrivedCount;
+}
+
+function setTool(tool) {
+  state.tool = tool;
+  state.cableStart = null;
+  document.querySelectorAll('.palette-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.tool === tool);
+  });
+  svg.classList.remove('placing', 'cabling', 'breaking', 'deleting');
+  if (['pc','server','switch','router'].includes(tool)) svg.classList.add('placing');
+  else if (tool === 'cable-wired' || tool === 'cable-wireless') svg.classList.add('cabling');
+  else if (tool === 'break') svg.classList.add('breaking');
+  else if (tool === 'delete') svg.classList.add('deleting');
+  $('#toolInfo').innerHTML = TOOL_INFO[tool] || '';
+  render();
+}
+
+/* ====================== DEVICE MANAGEMENT ====================== */
+
+function addDevice(type, x, y) {
+  const cfg = DEVICE_CONFIG[type];
+  const sameType = state.devices.filter(d => d.type === type).length + 1;
+  const dev = {
+    id: state.nextId++,
+    type, x, y,
+    label: cfg.label + '-' + sameType
+  };
+  state.devices.push(dev);
+  log(`Added ${cfg.label} (${dev.label})`, 'info');
+  updateStats();
+  render();
+  return dev;
+}
+
+function removeDevice(id) {
+  const dev = state.devices.find(d => d.id === id);
+  if (!dev) return;
+  state.devices = state.devices.filter(d => d.id !== id);
+  state.connections = state.connections.filter(c => c.from !== id && c.to !== id);
+  state.packets = state.packets.filter(p => p.src !== id && p.dst !== id);
+  log(`Removed ${dev.label}`, 'error');
+  updateStats();
+  render();
+}
+
+function getDevice(id) {
+  return state.devices.find(d => d.id === id);
+}
+
+/* ====================== CABLE MANAGEMENT ====================== */
+
+function addConnection(fromId, toId, type = 'wired') {
+  if (fromId === toId) {
+    toast('Cannot connect a device to itself', 'error');
+    return;
+  }
+  const exists = state.connections.find(c =>
+    (c.from === fromId && c.to === toId) || (c.from === toId && c.to === fromId)
+  );
+  if (exists) {
+    toast('These devices are already connected', 'error');
+    return;
+  }
+  const conn = {
+    id: state.nextId++,
+    from: fromId, to: toId,
+    broken: false,
+    type
+  };
+  state.connections.push(conn);
+  const f = getDevice(fromId), t = getDevice(toId);
+  const cableLabel = type === 'wireless' ? 'WiFi link' : 'Ethernet cable';
+  log(`Connected ${f.label} <-> ${t.label} (${cableLabel})`, 'info');
+  updateStats();
+  render();
+}
+
+function removeConnection(id) {
+  const conn = state.connections.find(c => c.id === id);
+  if (!conn) return;
+  state.connections = state.connections.filter(c => c.id !== id);
+  // also remove any packets that were using this connection
+  state.packets = state.packets.filter(p => {
+    if (p.status !== 'transit') return true;
+    const edge = p.route[p.currentEdgeIdx];
+    if (!edge) return true;
+    return !((edge.from === conn.from && edge.to === conn.to) || (edge.from === conn.to && edge.to === conn.from));
+  });
+  log(`Removed cable`, 'error');
+  updateStats();
+  render();
+}
+
+function toggleBreak(id) {
+  const conn = state.connections.find(c => c.id === id);
+  if (!conn) return;
+  conn.broken = !conn.broken;
+  const f = getDevice(conn.from), t = getDevice(conn.to);
+  if (conn.broken) {
+    log(`CABLE BROKEN: ${f.label} <X> ${t.label}`, 'error');
+    toast('Cable broken — packets will reroute', 'error');
+    // Reroute any packets currently using this edge
+    state.packets.forEach(p => {
+      if (p.status !== 'transit') return;
+      const edge = p.route[p.currentEdgeIdx];
+      if (!edge) return;
+      if ((edge.from === conn.from && edge.to === conn.to) || (edge.from === conn.to && edge.to === conn.from)) {
+        // Packet is on broken cable - it gets lost
+        p.status = 'lost';
+        log(`Packet ${p.seqNum}/${p.totalSeq} LOST on broken cable`, 'error');
+        // Schedule retransmission
+        scheduleRetransmit(p);
+      }
+    });
+  } else {
+    log(`Cable restored: ${f.label} <-> ${t.label}`, 'info');
+    toast('Cable restored', 'success');
+  }
+  render();
+}
+
+/* ====================== ROUTING (BFS) ====================== */
+
+function findRoute(srcId, dstId) {
+  // BFS from src to dst, only using non-broken edges
+  // Returns array of edges: [{from, to}, ...]
+  if (srcId === dstId) return [];
+
+  const visited = new Set([srcId]);
+  const queue = [{ id: srcId, path: [] }];
+
+  // For variety: shuffle neighbours so paths vary when multiple equal-length exist
+  while (queue.length > 0) {
+    const { id, path } = queue.shift();
+    if (id === dstId) return path;
+
+    const neighbours = [];
+    state.connections.forEach(c => {
+      if (c.broken) return;
+      if (c.from === id && !visited.has(c.to)) neighbours.push({ to: c.to, edge: { from: id, to: c.to } });
+      else if (c.to === id && !visited.has(c.from)) neighbours.push({ to: c.from, edge: { from: id, to: c.from } });
+    });
+    // Randomize order to create varied routes
+    neighbours.sort(() => Math.random() - 0.5);
+
+    for (const n of neighbours) {
+      if (!visited.has(n.to)) {
+        visited.add(n.to);
+        queue.push({ id: n.to, path: [...path, n.edge] });
+      }
+    }
+  }
+  return null; // no route
+}
+
+/* ====================== PACKET SENDING ====================== */
+
+function sendMessage(srcId, dstId, text) {
+  const src = getDevice(srcId);
+  const dst = getDevice(dstId);
+  if (!src || !dst) { toast('Invalid source or destination', 'error'); return; }
+
+  // Tokenize message into "packets" - words
+  let words = text.trim().split(/\s+/).filter(w => w.length > 0);
+  if (words.length === 0) {
+    toast('Message is empty', 'error');
+    return;
+  }
+  // Cap at 12 packets
+  if (words.length > 12) {
+    const chunks = [];
+    const per = Math.ceil(words.length / 12);
+    for (let i = 0; i < words.length; i += per) {
+      chunks.push(words.slice(i, i + per).join(' '));
+    }
+    words = chunks;
+  }
+
+  // Check if at least one route exists
+  if (!findRoute(srcId, dstId)) {
+    toast('No route to destination! Check your network.', 'error');
+    log(`No route from ${src.label} to ${dst.label}`, 'error');
+    return;
+  }
+
+  const msgId = state.nextMsgId++;
+  state.messages[msgId] = {
+    id: msgId,
+    src: srcId, dst: dstId,
+    text, totalPackets: words.length,
+    arrived: 0, lost: 0,
+    words: words,
+    received: new Array(words.length).fill(null),
+  };
+
+  log(`MESSAGE #${msgId}: "${text}" (${words.length} packets) ${src.label} → ${dst.label}`, 'send');
+
+  // Stagger packet sending
+  words.forEach((word, idx) => {
+    setTimeout(() => sendPacket(srcId, dstId, word, idx + 1, words.length, msgId), idx * (300 / state.speed));
+  });
+}
+
+function sendPacket(srcId, dstId, data, seqNum, totalSeq, msgId, isRetransmit = false) {
+  const route = findRoute(srcId, dstId);
+  if (!route) {
+    log(`Packet ${seqNum}/${totalSeq} cannot find route - DROPPED`, 'error');
+    const msg = state.messages[msgId];
+    if (msg) msg.lost++;
+    return;
+  }
+  const packet = {
+    id: state.nextId++,
+    src: srcId, dst: dstId,
+    data, seqNum, totalSeq, msgId,
+    route, currentEdgeIdx: 0, progress: 0,
+    status: 'transit',
+    isRetransmit
+  };
+  state.packets.push(packet);
+  state.packetCount++;
+  if (isRetransmit) {
+    log(`Packet ${seqNum}/${totalSeq} RESENT (${data})`, 'info');
+  } else {
+    log(`Packet ${seqNum}/${totalSeq} sent: "${data}" via ${route.length} hop${route.length === 1 ? '' : 's'}`, 'send');
+  }
+  updateStats();
+}
+
+function scheduleRetransmit(packet) {
+  setTimeout(() => {
+    sendPacket(packet.src, packet.dst, packet.data, packet.seqNum, packet.totalSeq, packet.msgId, true);
+  }, 800 / state.speed);
+}
+
+function deliverPacket(packet) {
+  packet.status = 'arrived';
+  state.arrivedCount++;
+  const msg = state.messages[packet.msgId];
+  if (msg) {
+    if (msg.received[packet.seqNum - 1] === null) {
+      msg.received[packet.seqNum - 1] = packet.data;
+      msg.arrived++;
+    }
+    log(`Packet ${packet.seqNum}/${packet.totalSeq} ARRIVED: "${packet.data}"`, 'recv');
+    if (msg.arrived === msg.totalPackets) {
+      const reassembled = msg.received.join(' ');
+      const dst = getDevice(packet.dst);
+      log(`Message #${msg.id} fully assembled at ${dst.label}: "${reassembled}"`, 'recv');
+      toast(`Message received at ${dst.label}: "${reassembled}"`, 'success');
+    }
+  }
+  updateStats();
+  // Remove arrived packet after a short delay (visual)
+  setTimeout(() => {
+    state.packets = state.packets.filter(p => p.id !== packet.id);
+    render();
+  }, 600);
+}
+
+/* ====================== ANIMATION LOOP ====================== */
+
+const SPEED_LEVELS = [0.5, 1, 2, 4];
+let speedIdx = 1;
+
+let lastFrameTime = 0;
+function animate(now) {
+  if (lastFrameTime === 0) lastFrameTime = now;
+  const dtMs = Math.min(50, now - lastFrameTime);
+  lastFrameTime = now;
+
+  if (!state.paused) {
+    // Update packets in transit
+    for (let i = state.packets.length - 1; i >= 0; i--) {
+      const p = state.packets[i];
+      if (p.status !== 'transit') continue;
+      // Move along edge
+      const speedFactor = 0.0018 * state.speed; // edges per ms
+      p.progress += speedFactor * dtMs;
+      if (p.progress >= 1) {
+        // Just finished an edge — check for wireless packet loss
+        const completedEdge = p.route[p.currentEdgeIdx];
+        const completedConn = state.connections.find(c =>
+          (c.from === completedEdge.from && c.to === completedEdge.to) ||
+          (c.from === completedEdge.to && c.to === completedEdge.from)
+        );
+        // Wireless edges have ~8% loss chance per hop (educational realism)
+        if (completedConn && completedConn.type === 'wireless' && Math.random() < 0.08) {
+          log(`Packet ${p.seqNum}/${p.totalSeq} LOST on WiFi (signal dropped)`, 'error');
+          p.status = 'lost';
+          scheduleRetransmit(p);
+          state.packets.splice(i, 1);
+          continue;
+        }
+        p.progress = 0;
+        p.currentEdgeIdx++;
+        if (p.currentEdgeIdx >= p.route.length) {
+          deliverPacket(p);
+        } else {
+          // Check if next edge is broken
+          const nextEdge = p.route[p.currentEdgeIdx];
+          const conn = state.connections.find(c =>
+            (c.from === nextEdge.from && c.to === nextEdge.to) ||
+            (c.from === nextEdge.to && c.to === nextEdge.from)
+          );
+          if (!conn || conn.broken) {
+            // Try to re-route from current position
+            const currentNode = nextEdge.from;
+            const newRoute = findRoute(currentNode, p.dst);
+            if (newRoute && newRoute.length > 0) {
+              p.route = p.route.slice(0, p.currentEdgeIdx).concat(newRoute);
+              log(`Packet ${p.seqNum}/${p.totalSeq} rerouted (${newRoute.length} hops)`, 'info');
+            } else {
+              p.status = 'lost';
+              log(`Packet ${p.seqNum}/${p.totalSeq} LOST — no route from ${getDevice(currentNode).label}`, 'error');
+              scheduleRetransmit(p);
+              state.packets.splice(i, 1);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  render();
+  requestAnimationFrame(animate);
+}
+
+/* ====================== RENDERING ====================== */
+
+function render() {
+  const w = svg.clientWidth, h = svg.clientHeight;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+  // Build SVG content
+  let html = '';
+
+  // Connections (cables)
+  state.connections.forEach(c => {
+    const a = getDevice(c.from), b = getDevice(c.to);
+    if (!a || !b) return;
+    const classes = ['cable'];
+    if (c.type === 'wireless') classes.push('wireless');
+    if (c.broken) classes.push('broken');
+    html += `<line class="${classes.join(' ')}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" data-id="${c.id}"/>`;
+    // For wireless, show small "signal" arcs around midpoint
+    if (c.type === 'wireless' && !c.broken) {
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.sqrt(dx*dx + dy*dy);
+      const perpX = -dy / len * 6, perpY = dx / len * 6;
+      html += `<circle cx="${mx + perpX}" cy="${my + perpY}" r="3" fill="${'#ff2d95'}" opacity="0.6"/>`;
+      html += `<circle cx="${mx - perpX}" cy="${my - perpY}" r="3" fill="${'#ff2d95'}" opacity="0.6"/>`;
+    }
+    if (c.broken) {
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      html += `<circle class="cable-break-mark" cx="${mx}" cy="${my}" r="10"/>`;
+      html += `<text class="cable-break-mark" x="${mx}" y="${my+4}" text-anchor="middle" font-family="VT323" font-size="14" fill="white" stroke="none">X</text>`;
+    }
+  });
+
+  // Cable preview (when in cable mode)
+  if ((state.tool === 'cable-wired' || state.tool === 'cable-wireless') && state.cableStart != null) {
+    const a = getDevice(state.cableStart);
+    if (a) {
+      const previewClass = state.tool === 'cable-wireless' ? 'cable preview wireless' : 'cable preview';
+      html += `<line class="${previewClass}" x1="${a.x}" y1="${a.y}" x2="${state.mouseX}" y2="${state.mouseY}"/>`;
+    }
+  }
+
+  // Devices
+  state.devices.forEach(d => {
+    const cfg = DEVICE_CONFIG[d.type];
+    const s = cfg.size;
+    const half = s / 2;
+    let bodyHtml = '';
+    if (d.type === 'pc') {
+      bodyHtml = `
+        <rect class="device-body" x="${d.x - half + 4}" y="${d.y - half + 6}" width="${s - 8}" height="${s - 16}" fill="${cfg.color}" fill-opacity="0.15" stroke="${cfg.color}" stroke-width="2"/>
+        <line x1="${d.x - 8}" y1="${d.y + half - 2}" x2="${d.x + 8}" y2="${d.y + half - 2}" stroke="${cfg.color}" stroke-width="2"/>
+        <line x1="${d.x}" y1="${d.y + half - 10}" x2="${d.x}" y2="${d.y + half - 2}" stroke="${cfg.color}" stroke-width="2"/>
+      `;
+    } else if (d.type === 'server') {
+      bodyHtml = `
+        <rect class="device-body" x="${d.x - half + 4}" y="${d.y - half + 4}" width="${s - 8}" height="${s - 8}" fill="${cfg.color}" fill-opacity="0.15" stroke="${cfg.color}" stroke-width="2"/>
+        <line x1="${d.x - half + 8}" y1="${d.y - half + 14}" x2="${d.x + half - 8}" y2="${d.y - half + 14}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x - half + 8}" y1="${d.y - half + 24}" x2="${d.x + half - 8}" y2="${d.y - half + 24}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x - half + 8}" y1="${d.y - half + 34}" x2="${d.x + half - 8}" y2="${d.y - half + 34}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <circle cx="${d.x - half + 12}" cy="${d.y - half + 10}" r="2" fill="${cfg.color}"/>
+        <circle cx="${d.x - half + 12}" cy="${d.y - half + 20}" r="2" fill="${cfg.color}"/>
+        <circle cx="${d.x - half + 12}" cy="${d.y - half + 30}" r="2" fill="${cfg.color}"/>
+      `;
+    } else if (d.type === 'switch') {
+      bodyHtml = `
+        <rect class="device-body" x="${d.x - half + 2}" y="${d.y - 8}" width="${s - 4}" height="16" rx="2" fill="${cfg.color}" fill-opacity="0.15" stroke="${cfg.color}" stroke-width="2"/>
+        <line x1="${d.x - 16}" y1="${d.y - 8}" x2="${d.x - 16}" y2="${d.y - 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x - 6}" y1="${d.y - 8}" x2="${d.x - 6}" y2="${d.y - 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x + 6}" y1="${d.y - 8}" x2="${d.x + 6}" y2="${d.y - 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x + 16}" y1="${d.y - 8}" x2="${d.x + 16}" y2="${d.y - 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x - 16}" y1="${d.y + 8}" x2="${d.x - 16}" y2="${d.y + 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x - 6}" y1="${d.y + 8}" x2="${d.x - 6}" y2="${d.y + 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x + 6}" y1="${d.y + 8}" x2="${d.x + 6}" y2="${d.y + 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+        <line x1="${d.x + 16}" y1="${d.y + 8}" x2="${d.x + 16}" y2="${d.y + 16}" stroke="${cfg.color}" stroke-width="1.5"/>
+      `;
+    } else if (d.type === 'router') {
+      bodyHtml = `
+        <circle class="device-body" cx="${d.x}" cy="${d.y}" r="${half - 4}" fill="${cfg.color}" fill-opacity="0.15" stroke="${cfg.color}" stroke-width="2"/>
+        <path d="M ${d.x - 12} ${d.y - 4} L ${d.x + 12} ${d.y - 4} M ${d.x + 8} ${d.y - 8} L ${d.x + 12} ${d.y - 4} L ${d.x + 8} ${d.y}" stroke="${cfg.color}" stroke-width="1.5" fill="none"/>
+        <path d="M ${d.x + 12} ${d.y + 4} L ${d.x - 12} ${d.y + 4} M ${d.x - 8} ${d.y} L ${d.x - 12} ${d.y + 4} L ${d.x - 8} ${d.y + 8}" stroke="${cfg.color}" stroke-width="1.5" fill="none"/>
+      `;
+    }
+    html += `<g class="device" data-id="${d.id}" transform="translate(0 0)">
+      ${bodyHtml}
+      <text class="device-label" x="${d.x}" y="${d.y + half + 14}">${d.label}</text>
+    </g>`;
+  });
+
+  // Packets
+  state.packets.forEach(p => {
+    if (p.status !== 'transit') return;
+    const edge = p.route[p.currentEdgeIdx];
+    if (!edge) return;
+    const a = getDevice(edge.from), b = getDevice(edge.to);
+    if (!a || !b) return;
+    const x = a.x + (b.x - a.x) * p.progress;
+    const y = a.y + (b.y - a.y) * p.progress;
+    html += `<g class="packet">
+      <rect class="packet-body" x="${x - 14}" y="${y - 9}" width="28" height="18" rx="2"/>
+      <text class="packet-text" x="${x}" y="${y + 4}">${p.seqNum}/${p.totalSeq}</text>
+    </g>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+/* ====================== INTERACTION ====================== */
+
+svg.addEventListener('mousemove', (e) => {
+  const rect = svg.getBoundingClientRect();
+  state.mouseX = e.clientX - rect.left;
+  state.mouseY = e.clientY - rect.top;
+  if (state.draggingDevice) {
+    state.draggingDevice.x = state.mouseX - state.dragOffset.x;
+    state.draggingDevice.y = state.mouseY - state.dragOffset.y;
+  }
+});
+
+svg.addEventListener('mousedown', (e) => {
+  const rect = svg.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  // What did we click?
+  const target = e.target.closest('.device, .cable');
+
+  if (state.tool === 'move') {
+    if (target && target.classList.contains('device')) {
+      const id = parseInt(target.dataset.id);
+      const dev = getDevice(id);
+      if (dev) {
+        state.draggingDevice = dev;
+        state.dragOffset = { x: x - dev.x, y: y - dev.y };
+      }
+    }
+    return;
+  }
+
+  if (['pc','server','switch','router'].includes(state.tool)) {
+    // Place a device
+    if (!target) {
+      addDevice(state.tool, x, y);
+    }
+    return;
+  }
+
+  if (state.tool === 'cable-wired' || state.tool === 'cable-wireless') {
+    if (target && target.classList.contains('device')) {
+      const id = parseInt(target.dataset.id);
+      if (state.cableStart == null) {
+        state.cableStart = id;
+        toast('Now click a second device', 'info');
+      } else {
+        const cableType = state.tool === 'cable-wireless' ? 'wireless' : 'wired';
+        addConnection(state.cableStart, id, cableType);
+        state.cableStart = null;
+      }
+    } else {
+      state.cableStart = null;
+    }
+    return;
+  }
+
+  if (state.tool === 'break') {
+    if (target && target.classList.contains('cable')) {
+      const id = parseInt(target.dataset.id);
+      toggleBreak(id);
+    }
+    return;
+  }
+
+  if (state.tool === 'delete') {
+    if (!target) return;
+    const id = parseInt(target.dataset.id);
+    if (target.classList.contains('device')) removeDevice(id);
+    else if (target.classList.contains('cable')) removeConnection(id);
+    return;
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  state.draggingDevice = null;
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    setTool('move');
+    state.cableStart = null;
+  }
+});
+
+// Touch support
+let touchDragId = null;
+svg.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const rect = svg.getBoundingClientRect();
+  state.mouseX = t.clientX - rect.left;
+  state.mouseY = t.clientY - rect.top;
+  // synthesize mousedown
+  const evt = new MouseEvent('mousedown', { clientX: t.clientX, clientY: t.clientY, bubbles: true });
+  t.target.dispatchEvent(evt);
+}, { passive: true });
+
+svg.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const rect = svg.getBoundingClientRect();
+  state.mouseX = t.clientX - rect.left;
+  state.mouseY = t.clientY - rect.top;
+  if (state.draggingDevice) {
+    state.draggingDevice.x = state.mouseX - state.dragOffset.x;
+    state.draggingDevice.y = state.mouseY - state.dragOffset.y;
+    e.preventDefault();
+  }
+}, { passive: false });
+
+svg.addEventListener('touchend', () => {
+  state.draggingDevice = null;
+});
+
+document.querySelectorAll('.palette-item').forEach(el => {
+  el.addEventListener('click', () => {
+    setTool(el.dataset.tool);
+  });
+});
+
+/* ====================== TOP CONTROLS ====================== */
+
+$('#btnSend').addEventListener('click', () => {
+  openSendModal();
+});
+
+$('#btnPause').addEventListener('click', (e) => {
+  state.paused = !state.paused;
+  e.target.textContent = state.paused ? 'RESUME' : 'PAUSE';
+  e.target.classList.toggle('primary', state.paused);
+});
+
+$('#btnSpeed').addEventListener('click', (e) => {
+  speedIdx = (speedIdx + 1) % SPEED_LEVELS.length;
+  state.speed = SPEED_LEVELS[speedIdx];
+  e.target.textContent = 'SPEED: ' + state.speed + 'x';
+});
+
+$('#btnClear').addEventListener('click', () => {
+  if (state.devices.length === 0 && state.connections.length === 0) return;
+  if (!confirm('Clear the whole network?')) return;
+  state.devices = [];
+  state.connections = [];
+  state.packets = [];
+  state.messages = {};
+  state.cableStart = null;
+  state.packetCount = 0;
+  state.arrivedCount = 0;
+  $('#log').innerHTML = '';
+  log('Network cleared', 'info');
+  updateStats();
+  render();
+});
+
+$('#btnHelp').addEventListener('click', () => {
+  openHelpModal();
+});
+
+$('#btnScenario').addEventListener('click', () => {
+  openScenarioModal();
+});
+
+/* ====================== MODALS ====================== */
+
+function openSendModal() {
+  const senders = state.devices.filter(d => DEVICE_CONFIG[d.type].canSend);
+  if (senders.length < 2) {
+    toast('You need at least 2 PCs or servers to send a message', 'error');
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.className = 'modal-bg';
+  modal.innerHTML = `
+    <div class="modal">
+      <h2>>> SEND MESSAGE</h2>
+      <p>The message will be split into <b>packets</b> (one per word). Each packet gets a header with FROM, TO and SEQUENCE number. Watch them travel through your network!</p>
+      <label>FROM (source)</label>
+      <select id="srcSel">${senders.map(d => `<option value="${d.id}">${d.label}</option>`).join('')}</select>
+      <label>TO (destination)</label>
+      <select id="dstSel">${senders.map(d => `<option value="${d.id}">${d.label}</option>`).join('')}</select>
+      <label>MESSAGE (each word = 1 packet)</label>
+      <input type="text" id="msgInput" value="Hello world this is a test" maxlength="100" />
+      <div class="modal-buttons">
+        <button class="ctrl-btn" id="cancelSend">CANCEL</button>
+        <button class="ctrl-btn primary" id="confirmSend">>> SEND</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  $('#dstSel').selectedIndex = Math.min(1, senders.length - 1);
+  modal.querySelector('#cancelSend').onclick = () => modal.remove();
+  modal.querySelector('#confirmSend').onclick = () => {
+    const src = parseInt($('#srcSel').value);
+    const dst = parseInt($('#dstSel').value);
+    const text = $('#msgInput').value;
+    if (src === dst) { toast('Source and destination must be different', 'error'); return; }
+    sendMessage(src, dst, text);
+    modal.remove();
+  };
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+function openHelpModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-bg';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 600px;">
+      <h2>>> HOW TO USE PACKET LAB</h2>
+      <div style="font-size: 12px; color: var(--ink); line-height: 1.7;">
+        <p style="color: var(--cyan); margin-bottom: 6px;"><b>1. Build a network</b></p>
+        <p>Click a device in the left palette (PC, SERVER, SWITCH, ROUTER), then click on the canvas to drop it. Drop at least 2 PCs and a switch.</p>
+        <p style="color: var(--cyan); margin-bottom: 6px;"><b>2. Connect with cables — WIRED or WIRELESS</b></p>
+        <p>Click <b style="color: var(--cyan);">WIRED</b> (cyan solid line) for fast, stable Ethernet connections. Click <b style="color: var(--pink);">WIRELESS</b> (pink dashed line) for WiFi-style connections — convenient, but about 1 in 12 packets gets lost and must be resent. Then click two devices to connect them.</p>
+        <p style="color: var(--cyan); margin-bottom: 6px;"><b>3. Send a message</b></p>
+        <p>Click <b>>> SEND MESSAGE</b> at the top. Pick a source PC, a destination PC, and type a message. Each word becomes a packet that travels separately!</p>
+        <p style="color: var(--cyan); margin-bottom: 6px;"><b>4. Break a cable</b></p>
+        <p>Click the <b>BREAK</b> tool, then click any cable to break it. Packets reroute or get re-sent — just like the real internet.</p>
+        <p style="color: var(--cyan); margin-bottom: 6px;"><b>5. Try a scenario</b></p>
+        <p>Click <b>LOAD SCENARIO</b> for 6 pre-built networks. <b>HOME WIFI</b> and <b>HOSPITAL</b> show why wired beats wireless in some places.</p>
+      </div>
+      <div class="modal-buttons">
+        <button class="ctrl-btn primary" id="closeHelp">GOT IT</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector('#closeHelp').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+function openScenarioModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-bg';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 540px;">
+      <h2>>> LOAD SCENARIO</h2>
+      <p>Pre-built networks. Loading replaces your current network. <span style="color: var(--cyan);">Cyan</span> = wired (stable). <span style="color: var(--pink);">Pink dashed</span> = wireless (sometimes drops packets).</p>
+      <div style="display: grid; gap: 8px;">
+        <button class="ctrl-btn" data-sc="simple">SIMPLE — 2 PCs + Switch (one wired route)</button>
+        <button class="ctrl-btn" data-sc="mesh">MESH — Multiple wired routes (packets split)</button>
+        <button class="ctrl-btn" data-sc="redundant">RESILIENT — Break-the-cable demo</button>
+        <button class="ctrl-btn" data-sc="home">HOME WIFI — Wired vs wireless side by side</button>
+        <button class="ctrl-btn" data-sc="hospital">HOSPITAL — When wired wins (life-critical)</button>
+        <button class="ctrl-btn" data-sc="school">SCHOOL — Realistic small network (mixed)</button>
+      </div>
+      <div class="modal-buttons">
+        <button class="ctrl-btn" id="closeSc">CANCEL</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelectorAll('[data-sc]').forEach(btn => {
+    btn.onclick = () => {
+      loadScenario(btn.dataset.sc);
+      modal.remove();
+    };
+  });
+  modal.querySelector('#closeSc').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+/* ====================== SCENARIOS ====================== */
+
+function loadScenario(name) {
+  state.devices = [];
+  state.connections = [];
+  state.packets = [];
+  state.messages = {};
+  state.packetCount = 0;
+  state.arrivedCount = 0;
+  $('#log').innerHTML = '';
+  state.nextId = 1;
+  state.nextMsgId = 1;
+
+  const w = svg.clientWidth, h = svg.clientHeight;
+  const cx = w / 2, cy = h / 2;
+
+  if (name === 'simple') {
+    const pc1 = addDevice('pc', cx - 180, cy);
+    const sw  = addDevice('switch', cx, cy);
+    const pc2 = addDevice('pc', cx + 180, cy);
+    addConnection(pc1.id, sw.id);
+    addConnection(sw.id, pc2.id);
+    log('SCENARIO: Simple network loaded. Try sending a message from PC-1 to PC-2.', 'info');
+    toast('Simple scenario loaded', 'success');
+  }
+  else if (name === 'mesh') {
+    const pc1 = addDevice('pc', cx - 220, cy);
+    const r1  = addDevice('router', cx - 80, cy - 80);
+    const r2  = addDevice('router', cx + 80, cy - 80);
+    const r3  = addDevice('router', cx - 80, cy + 80);
+    const r4  = addDevice('router', cx + 80, cy + 80);
+    const pc2 = addDevice('pc', cx + 220, cy);
+    addConnection(pc1.id, r1.id);
+    addConnection(pc1.id, r3.id);
+    addConnection(r1.id, r2.id);
+    addConnection(r3.id, r4.id);
+    addConnection(r1.id, r3.id);
+    addConnection(r2.id, r4.id);
+    addConnection(r2.id, pc2.id);
+    addConnection(r4.id, pc2.id);
+    log('SCENARIO: Mesh network loaded. Send a message — watch packets take different routes!', 'info');
+    toast('Mesh scenario loaded — try sending a long message', 'success');
+  }
+  else if (name === 'redundant') {
+    const pc1 = addDevice('pc', cx - 220, cy);
+    const r1  = addDevice('router', cx - 60, cy - 100);
+    const r2  = addDevice('router', cx - 60, cy + 100);
+    const r3  = addDevice('router', cx + 60, cy - 100);
+    const r4  = addDevice('router', cx + 60, cy + 100);
+    const pc2 = addDevice('pc', cx + 220, cy);
+    addConnection(pc1.id, r1.id);
+    addConnection(pc1.id, r2.id);
+    addConnection(r1.id, r3.id);
+    addConnection(r2.id, r4.id);
+    addConnection(r3.id, pc2.id);
+    addConnection(r4.id, pc2.id);
+    log('SCENARIO: Resilient network loaded. Send a message, then BREAK a cable mid-send!', 'info');
+    toast('Try sending a message, then break a cable!', 'success');
+  }
+  else if (name === 'home') {
+    const desktop = addDevice('pc', cx - 220, cy - 80);
+    const laptop  = addDevice('pc', cx - 220, cy + 80);
+    const router  = addDevice('router', cx, cy);
+    const phone   = addDevice('pc', cx + 220, cy - 80);
+    const tv      = addDevice('pc', cx + 220, cy + 80);
+    desktop.label = 'Desktop-PC';
+    laptop.label = 'Laptop';
+    phone.label = 'Phone';
+    tv.label = 'Smart-TV';
+    addConnection(desktop.id, router.id, 'wired');     // Desktop = wired
+    addConnection(laptop.id, router.id, 'wireless');    // Laptop = WiFi
+    addConnection(phone.id, router.id, 'wireless');     // Phone = WiFi
+    addConnection(tv.id, router.id, 'wireless');        // TV = WiFi
+    log('SCENARIO: Home WiFi. Desktop is WIRED. Laptop, Phone and TV are WIRELESS. Send messages and watch how WiFi sometimes drops packets!', 'info');
+    toast('Home WiFi loaded — try Desktop → Laptop', 'success');
+  }
+  else if (name === 'hospital') {
+    const surgeryPC = addDevice('pc', cx - 220, cy - 100);
+    const patientDB = addDevice('server', cx, cy);
+    const nurseTab  = addDevice('pc', cx + 220, cy - 100);
+    const visitor   = addDevice('pc', cx + 220, cy + 100);
+    surgeryPC.label = 'Surgery-PC';
+    patientDB.label = 'Patient-DB';
+    nurseTab.label = 'Nurse-Tablet';
+    visitor.label = 'Visitor-Phone';
+    // Surgery PC is WIRED (life-critical, must not drop)
+    addConnection(surgeryPC.id, patientDB.id, 'wired');
+    // Nurse tablet is WIRELESS (mobility matters, OK if occasional drop)
+    addConnection(nurseTab.id, patientDB.id, 'wireless');
+    // Visitor phone is WIRELESS (low priority)
+    addConnection(visitor.id, patientDB.id, 'wireless');
+    log('SCENARIO: Hospital. Surgery PC is WIRED (life-critical, no drops). Nurse tablet and visitor phone are WIRELESS (mobile but lossy).', 'info');
+    toast('Hospital loaded — note: surgery is WIRED for a reason', 'success');
+  }
+  else if (name === 'school') {
+    const office = addDevice('pc', cx - 280, cy - 120);
+    const lib1   = addDevice('pc', cx - 280, cy);
+    const lib2   = addDevice('pc', cx - 280, cy + 120);
+    const sw1    = addDevice('switch', cx - 120, cy);
+    const rtr    = addDevice('router', cx, cy);
+    const sw2    = addDevice('switch', cx + 120, cy);
+    const it1    = addDevice('pc', cx + 280, cy - 120);
+    const it2    = addDevice('pc', cx + 280, cy);
+    const server = addDevice('server', cx + 280, cy + 120);
+    office.label = 'Office-PC';
+    lib1.label = 'Library-Laptop';
+    lib2.label = 'Library-Tablet';
+    it1.label = 'IT-Suite-1';
+    it2.label = 'IT-Suite-2';
+    server.label = 'Server';
+    // Office is wired (admin needs reliability)
+    addConnection(office.id, sw1.id, 'wired');
+    // Library devices are wireless (laptops & tablets move around)
+    addConnection(lib1.id, sw1.id, 'wireless');
+    addConnection(lib2.id, sw1.id, 'wireless');
+    // Switch <-> router backbone is wired
+    addConnection(sw1.id, rtr.id, 'wired');
+    addConnection(rtr.id, sw2.id, 'wired');
+    // IT suite is wired (30 fixed PCs)
+    addConnection(it1.id, sw2.id, 'wired');
+    addConnection(it2.id, sw2.id, 'wired');
+    // Server is wired (must not drop)
+    addConnection(server.id, sw2.id, 'wired');
+    log('SCENARIO: School. Library devices are WIRELESS (they move). IT suite + server + office are WIRED. The backbone between switches is WIRED.', 'info');
+    toast('School scenario — try Office to Server', 'success');
+  }
+  setTool('move');
+  render();
+}
+
+/* ====================== INIT ====================== */
+
+function init() {
+  setTool('move');
+  updateStats();
+  log('Packet Lab ready. Click HELP to see how to use it.', 'info');
+  // Auto-load simple scenario on first run
+  setTimeout(() => loadScenario('simple'), 100);
+  // Start animation
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('load', init);
+window.addEventListener('resize', () => render());
+</script>
+</body>
+</html>
